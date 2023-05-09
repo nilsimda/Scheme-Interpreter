@@ -65,7 +65,11 @@ parseString = do
                 return $ String x
 
 parseAtom :: Parser LispVal
-parseAtom = liftM Atom $ (letter <|> symbol) >> many (letter <|> digit <|> symbol)
+parseAtom = do
+    first <- letter <|> symbol
+    rest <- many (letter <|> digit <|> symbol)
+    let atom = first:rest
+    return $ Atom atom
 
 parseBool :: Parser LispVal
 parseBool = (try (string "#t")>> notFollowedBy alphaNum >> return (Bool True)) <|>
@@ -162,7 +166,6 @@ eval :: LispVal -> LispVal
 eval val@(String _) = val
 eval val@(Number _) = val
 eval val@(Bool _) = val
-eval val@(Char _) = val
 eval (List [Atom "quote", val]) = val
 eval (List (Atom func : args)) = apply func $ map eval args
 
@@ -176,7 +179,14 @@ primitives = [("+", numericBinop (+)),
               ("/", numericBinop div),
               ("mod", numericBinop mod),
               ("quotient", numericBinop quot),
-              ("remainder", numericBinop rem)]
+              ("remainder", numericBinop rem),
+              ("string?", unaryOp stringp),
+              ("number?", unaryOp numberp),
+              ("boolean?", unaryOp booleanp),
+              ("symbol?", unaryOp symbolp),
+              ("list?", unaryOp listp),
+              ("symbol", unaryOp symbol2string),
+              ("string", unaryOp string2symbol)]
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
 numericBinop op params = Number $ foldl1 op $ map unpackNum params
@@ -184,6 +194,28 @@ numericBinop op params = Number $ foldl1 op $ map unpackNum params
 unpackNum :: LispVal -> Integer
 unpackNum (Number n) = n
 unpackNum _ = 0
+
+unaryOp :: (LispVal -> LispVal) -> [LispVal] -> LispVal
+unaryOp op [param] = op param
+
+stringp, numberp, booleanp, symbolp, listp :: LispVal -> LispVal
+stringp (String _) = Bool True
+stringp otherwise = Bool False
+numberp (Number _) = Bool True
+numberp otherwise = Bool False
+booleanp (Bool _) = Bool True
+booleanp otherwise = Bool False
+symbolp (Atom _) = Bool True
+symbolp otherwise = Bool False
+listp (List _) = Bool True
+listp (DottedList _ _) = Bool True
+listp otherwise = Bool False
+
+symbol2string, string2symbol :: LispVal -> LispVal
+symbol2string (Atom s) = String s
+symbol2string _ = String ""
+string2symbol (String s) = Atom s
+string2symbol _ = Atom ""
 
 
 
