@@ -14,7 +14,7 @@ import Text.ParserCombinators.Parsec
       (<|>),
       many,
       parse,
-      Parser, try, anyChar, notFollowedBy, alphaNum)
+      Parser, try, anyChar, notFollowedBy, alphaNum, sepBy, endBy)
 import System.Environment
 import Control.Monad
 import Numeric
@@ -74,14 +74,13 @@ parseBool = (try (string "#t")>> notFollowedBy alphaNum >> return (Bool True)) <
             (try (string "#f") >> notFollowedBy alphaNum >> return (Bool False))
 
 parseNumberWithPrefix :: Parser LispVal
-parseNumberWithPrefix = try (string "#d" >> many1 digit >>= \x -> (return . Number . read) x) <|>
-                        try (string "#o" >> many1 digit >>= \x -> (return . Number . fst . head . readOct) x) <|>
-                        try (string "#h" >> many1 digit >>= \x -> (return . Number . fst . head . readHex) x) <|>
-                        try (string "#b" >> many1 digit >>= \x -> (return . Number . fst . head . readBin) x)
+parseNumberWithPrefix = (string "#d" >> many1 digit >>= \x -> (return . Number . read) x) <|>
+                        (string "#o" >> many1 digit >>= \x -> (return . Number . fst . head . readOct) x) <|>
+                        (string "#h" >> many1 digit >>= \x -> (return . Number . fst . head . readHex) x) <|>
+                        (string "#b" >> many1 digit >>= \x -> (return . Number . fst . head . readBin) x)
 
-{- TODO: This matches too many things-}
 parseNumber :: Parser LispVal
-parseNumber = liftM (Number . read) (many1 digit) <|> parseNumberWithPrefix
+parseNumber = liftM (Number . read) (many1 digit) <|> try parseNumberWithPrefix
 
 parseChar :: Parser LispVal
 parseChar = do
@@ -114,6 +113,33 @@ parseComplex = try $ do
     char 'i'
     (return . Complex) (read real + read img)
 
+parseList :: Parser LispVal
+parseList = liftM List $ sepBy parseExpr spaces
+
+parseDottedList :: Parser LispVal
+parseDottedList = do 
+    head <- endBy parseExpr spaces
+    tail <- char '.' >> spaces >> parseExpr
+    return $ DottedList head tail
+
+parseQuoted :: Parser LispVal
+parseQuoted = do
+    char '\''
+    x <- parseExpr
+    return $ List [Atom "quote", x]
 
 parseExpr :: Parser LispVal
-parseExpr = parseAtom <|> parseString <|> parseRational <|> parseComplex <|> parseFloat <|> {-parseNumber <|>-} parseBool <|> parseChar
+parseExpr = parseAtom
+    <|> parseString
+    <|> parseRational
+    <|> parseComplex
+    <|> parseFloat
+    <|> parseNumber
+    <|> parseBool
+    <|> parseChar
+    <|> parseQuoted
+    <|> do 
+        char '('
+        x <- try parseList <|> parseDottedList
+        char ')'
+        return x
