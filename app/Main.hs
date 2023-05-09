@@ -18,6 +18,8 @@ import Text.ParserCombinators.Parsec
 import System.Environment
 import Control.Monad
 import Numeric
+import Data.Ratio
+import Data.Complex
 
 main :: IO ()
 main = do
@@ -42,6 +44,9 @@ data LispVal = Atom String
              | String String
              | Bool Bool
              | Char Char
+             | Float Double
+             | Rational Rational
+             | Complex (Complex Double)
 
 escapedChar :: Parser Char
 escapedChar = do
@@ -74,6 +79,7 @@ parseNumberWithPrefix = try (string "#d" >> many1 digit >>= \x -> (return . Numb
                         try (string "#h" >> many1 digit >>= \x -> (return . Number . fst . head . readHex) x) <|>
                         try (string "#b" >> many1 digit >>= \x -> (return . Number . fst . head . readBin) x)
 
+{- TODO: This matches too many things-}
 parseNumber :: Parser LispVal
 parseNumber = liftM (Number . read) (many1 digit) <|> parseNumberWithPrefix
 
@@ -86,5 +92,28 @@ parseChar = do
                 "newline" -> '\n'
                 otherwise -> head c
 
+parseFloat :: Parser LispVal
+parseFloat = try $ do
+        x1 <- many1 digit
+        char '.'
+        x2 <- many1 digit
+        (return . Float . fst . head . readFloat) (x1 ++ "." ++ x2)
+
+parseRational :: Parser LispVal        
+parseRational = try $ do
+        numer <- many1 digit
+        char '/'
+        denom <- many1 digit
+        (return . Rational) (read numer % read denom)
+
+parseComplex :: Parser LispVal
+parseComplex = try $ do 
+    real <- many1 digit
+    char '+'
+    img <- many1 digit
+    char 'i'
+    (return . Complex) (read real + read img)
+
+
 parseExpr :: Parser LispVal
-parseExpr = parseAtom <|> parseString <|> parseNumber <|> parseBool <|> parseChar
+parseExpr = parseAtom <|> parseString <|> parseRational <|> parseComplex <|> parseFloat <|> {-parseNumber <|>-} parseBool <|> parseChar
