@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Used otherwise as a pattern" #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE ExistentialQuantification #-}
 module Main where
 import Text.ParserCombinators.Parsec
     ( char,
@@ -192,11 +193,22 @@ eval val@(Rational _) = return val
 eval val@(Complex _) = return val
 eval val@(Bool _) = return val
 eval (List [Atom "quote", val]) = return val
-eval (List [Atom "if", pred , conseq, alt]) = do 
+eval (List [Atom "if", pred , conseq, alt]) = do
             result <- eval pred
             case result of
                 Bool False -> eval alt
                 otherwise -> eval conseq
+eval (List [Atom "cond"]) = return $ Bool False
+eval (List [Atom "cond", List (Atom "else":expr)]) = do 
+                mapM_ eval $ init expr
+                eval $ last expr
+eval (List (Atom "cond":List (test:expr):xss)) = do
+            result <- eval test
+            case result of
+                Bool True -> do
+                    mapM_ eval $ init expr
+                    eval $ last expr
+                otherwise -> eval $ List (Atom "cond":xss)
 eval (List (Atom func : args)) = mapM eval args >>= apply func
 eval badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
@@ -313,6 +325,7 @@ cons [x, DottedList xs xlast] = return $ DottedList (x : xs) xlast
 cons [x1, x2] = return $ DottedList [x1] x2
 cons badArgList = throwError $ NumArgs 2 badArgList
 
+
 eqv :: [LispVal] -> ThrowsError LispVal
 eqv [Bool arg1, Bool arg2] = return $ Bool $ arg1 == arg2
 eqv [Number arg1, Number arg2] = return $ Bool $ arg1 == arg2
@@ -325,7 +338,6 @@ eqv [List arg1, List arg2] = return $ Bool $ (length arg1 == length arg2) && all
                                 Right (Bool val) -> val
 eqv [_, _] = return $ Bool False
 eqv badArgList = throwError $ NumArgs 2 badArgList
-
 
 data LispError = NumArgs Integer [LispVal]
                | TypeMismatch String LispVal
@@ -355,6 +367,7 @@ trapError action = catchError action (return . show)
 
 extractValue :: ThrowsError a -> a
 extractValue (Right val) = val
+
 
 
 
