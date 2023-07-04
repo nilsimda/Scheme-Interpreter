@@ -92,7 +92,7 @@ parseNumberWithPrefix prefix = do
                 "#b" -> (fst . head . readBin) x
 
 parseNumber :: Parser LispVal
-parseNumber = liftM (Number . read) (many1 digit)
+parseNumber = fmap (Number . read) (many1 digit)
             <|> try (parseNumberWithPrefix "#d")
             <|> try (parseNumberWithPrefix "#o")
             <|> try (parseNumberWithPrefix "#h")
@@ -134,7 +134,7 @@ toDouble (Float f) = realToFrac f
 toDouble (Number n) = fromIntegral n
 
 parseList :: Parser LispVal
-parseList = liftM List $ sepBy parseExpr spaces
+parseList = List <$> sepBy parseExpr spaces
 
 parseDottedList :: Parser LispVal
 parseDottedList = do
@@ -199,7 +199,7 @@ eval (List [Atom "if", pred , conseq, alt]) = do
                 Bool False -> eval alt
                 otherwise -> eval conseq
 eval (List [Atom "cond"]) = return $ Bool False
-eval (List [Atom "cond", List (Atom "else":expr)]) = do 
+eval (List [Atom "cond", List (Atom "else":expr)]) = do
                 mapM_ eval $ init expr
                 eval $ last expr
 eval (List (Atom "cond":List (test:expr):xss)) = do
@@ -209,6 +209,18 @@ eval (List (Atom "cond":List (test:expr):xss)) = do
                     mapM_ eval $ init expr
                     eval $ last expr
                 otherwise -> eval $ List (Atom "cond":xss)
+eval (List [Atom "case", key]) = return $ Bool False
+eval (List [Atom "case", key, List (Atom "else":expr)]) = do
+                mapM_ eval $ init expr
+                eval $ last expr
+eval (List (Atom "case":key:List (datums:expr):xss)) = do
+            evaled_key <- eval key
+            result <- evaled_key `elem` datums
+            case result of
+                Bool True -> do
+                    mapM_ eval $ init expr
+                    eval $ last expr
+                otherwise -> eval $ List (Atom "case":key:xss)
 eval (List (Atom func : args)) = mapM eval args >>= apply func
 eval badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
